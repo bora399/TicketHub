@@ -1,18 +1,34 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Booking.API.Data;
+using Booking.API.Entities;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Booking.API.Controllers;
 
-public record CreateBookingRequest(Guid EventId, string UserId, int SeatCount);//dtoları c# 9 ile gelen record ile oluşturuyoruz.
+public record CreateBookingRequest(Guid EventId, string UserId, int SeatCount);
 
 [ApiController]
 [Route("api/[controller]")]
 public class BookingsController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly BookingDbContext _context;
 
-    public BookingsController(IHttpClientFactory httpClientFactory)
+    public BookingsController(IHttpClientFactory httpClientFactory, BookingDbContext context)
     {
         _httpClientFactory = httpClientFactory;
+        _context = context;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAllBookings()
+    {
+        var bookings = await _context.Bookings
+            .AsNoTracking()
+            .OrderByDescending(b => b.CreatedAt)
+            .ToListAsync();
+
+        return Ok(bookings);
     }
 
     [HttpPost]
@@ -28,14 +44,19 @@ public class BookingsController : ControllerBase
             return BadRequest(new { Message = "Katalog servisinden onay alınamadı", Detail = error });
         }
 
-        var bookingId = Guid.NewGuid();
-
-        return Ok(new
+        var booking = new BookingRecord
         {
-            BookingId = bookingId,
-            Status = "Confirmed",
+            Id = Guid.NewGuid(),
             EventId = request.EventId,
-            Seats = request.SeatCount
-        });
+            UserId = request.UserId,
+            SeatCount = request.SeatCount,
+            Status = "Confirmed",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.Bookings.Add(booking);
+        await _context.SaveChangesAsync();
+
+        return Ok(booking);
     }
 }
