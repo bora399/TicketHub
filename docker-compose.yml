@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  catalog-db:
+    image: postgres:16-alpine
+    container_name: tickethub-catalog-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: CatalogDb
+    ports:
+      - "5432:5432"
+    volumes:
+      - catalog_data:/var/lib/postgresql/data
+
+  booking-db:
+    image: postgres:16-alpine
+    container_name: tickethub-booking-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: BookingDb
+    ports:
+      - "5433:5432"
+    volumes:
+      - booking_data:/var/lib/postgresql/data
+
+volumes:
+  catalog_data:
+  booking_data:

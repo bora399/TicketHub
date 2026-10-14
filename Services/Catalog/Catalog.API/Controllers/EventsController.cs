@@ -1,43 +1,47 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Catalog.API.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Catalog.API.Controllers;
-
-public record EventDto(Guid Id, string Name, DateTime Date, decimal Price, int AvailableSeats);
 
 [ApiController]
 [Route("api/[controller]")]
 public class EventsController : ControllerBase
 {
-    private static readonly List<EventDto> _events = new()
+    private readonly CatalogDbContext _context;
+    public EventsController(CatalogDbContext context)
     {
-        new EventDto(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Mor ve Ötesi Konseri", DateTime.UtcNow.AddDays(10), 750m, 100),
-        new EventDto(Guid.Parse("22222222-2222-2222-2222-222222222222"), "Şampiyonlar Ligi Final Gösterimi", DateTime.UtcNow.AddDays(25), 300m, 5)
-    };
+        _context = context;
+    }
 
     [HttpGet]
-    public IActionResult GetAll() => Ok(_events);
+    public async Task<IActionResult> GetAll()
+    {
+        var events = await _context.Events.AsNoTracking().ToListAsync();
+        return Ok(events);
+    }
 
     [HttpGet("{id:guid}")]
-    public IActionResult GetById(Guid id)
+    public async Task<IActionResult> GetById(Guid id)
     {
-        var ev = _events.FirstOrDefault(e => e.Id == id);
+        var ev = await _context.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id);
         if (ev is null) return NotFound(new { Message = "Etkinlik bulunamadı." });
 
         return Ok(ev);
     }
 
     [HttpPost("{id:guid}/reserve-seats")]
-    public IActionResult ReserveSeats(Guid id, [FromBody] int seatCount)
+    public async Task<IActionResult> ReserveSeats(Guid id, [FromBody] int seatCount)
     {
-        var index = _events.FindIndex(e => e.Id == id);
-        if (index == -1) return NotFound("Etkinlik bulunamadı.");
+        var ev = await _context.Events.FirstOrDefaultAsync(e => e.Id == id);
+        if (ev is null) return NotFound("Etkinlik bulunamadı.");
 
-        var ev = _events[index];
         if (ev.AvailableSeats < seatCount)
             return BadRequest("Yeterli boş koltuk yok!");
 
-        _events[index] = ev with { AvailableSeats = ev.AvailableSeats - seatCount };
+        ev.AvailableSeats -= seatCount;
+        await _context.SaveChangesAsync();
 
-        return Ok(new { Message = $"{seatCount} koltuk ayrıldı.", RemainingSeats = _events[index].AvailableSeats });
+        return Ok(new { Message = $"{seatCount} koltuk ayrıldı.", RemainingSeats = ev.AvailableSeats });
     }
 }
