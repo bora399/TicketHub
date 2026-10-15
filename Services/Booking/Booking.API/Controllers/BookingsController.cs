@@ -1,5 +1,7 @@
 ﻿using Booking.API.Data;
 using Booking.API.Entities;
+using MassTransit;
+using Messaging.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,13 +13,13 @@ public record CreateBookingRequest(Guid EventId, string UserId, int SeatCount);
 [Route("api/[controller]")]
 public class BookingsController : ControllerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly BookingDbContext _context;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public BookingsController(IHttpClientFactory httpClientFactory, BookingDbContext context)
+    public BookingsController(BookingDbContext context, IPublishEndpoint publishEndpoint)
     {
-        _httpClientFactory = httpClientFactory;
         _context = context;
+        _publishEndpoint = publishEndpoint;
     }
 
     [HttpGet]
@@ -34,29 +36,28 @@ public class BookingsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
-        var client = _httpClientFactory.CreateClient("CatalogService");
-
-        var response = await client.PostAsJsonAsync($"api/events/{request.EventId}/reserve-seats", request.SeatCount);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var error = await response.Content.ReadAsStringAsync();
-            return BadRequest(new { Message = "Katalog servisinden onay alınamadı", Detail = error });
-        }
-
         var booking = new BookingRecord
         {
             Id = Guid.NewGuid(),
             EventId = request.EventId,
             UserId = request.UserId,
             SeatCount = request.SeatCount,
-            Status = "Confirmed",
+            Status = "Pending", 
             CreatedAt = DateTime.UtcNow
         };
 
         _context.Bookings.Add(booking);
         await _context.SaveChangesAsync();
 
-        return Ok(booking);
+        await _publishEndpoint.Publish(new BookingCreatedEvent
+        {
+            BookingId = booking.Id,
+            EventId = booking.EventId,
+            UserId = booking.UserId,
+            SeatCount = booking.SeatCount,
+            CreatedAt = booking.CreatedAt
+        });
+
+        return Accepted(booking);//asenkron yaklasım oldugundan ok yerine accepted dondururuz.
     }
 }

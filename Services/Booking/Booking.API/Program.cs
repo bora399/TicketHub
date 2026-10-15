@@ -1,4 +1,5 @@
 using Booking.API.Data;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,14 +11,20 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<BookingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Database")));
 
-builder.Services.AddHttpClient("CatalogService", client =>
+builder.Services.AddMassTransit(x =>
 {
-    client.BaseAddress = new Uri("http://localhost:5001");
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host("localhost", "/", h =>
+        {
+            h.Username("guest");//masstransit ve rabbitmq ayarlarýný yapýyoruz
+            h.Password("guest");
+        });
+    });
 });
 
 var app = builder.Build();
 
-//auto migration
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<BookingDbContext>();

@@ -1,5 +1,7 @@
+using Catalog.API.Consumers;
 using Catalog.API.Data;
 using Catalog.API.Entities;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +13,22 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<CatalogDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Database")));
 
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumer<BookingCreatedConsumer>();
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host("localhost", "/", h =>
+        {
+            h.Username("guest");
+            h.Password("guest");
+        });
+
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -20,12 +38,12 @@ using (var scope = app.Services.CreateScope())
 
     if (!dbContext.Events.Any())
     {
-        dbContext.Events.AddRange(//seed for test
+        dbContext.Events.AddRange(
             new EventItem
             {
                 Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
                 Name = "Mor ve Ötesi Konseri",
-                Date = DateTime.UtcNow.AddDays(10),
+                Date = DateTime.UtcNow.AddDays(10),//seedler
                 Price = 750m,
                 AvailableSeats = 100
             },
@@ -48,10 +66,5 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
-app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();
